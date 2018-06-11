@@ -17,10 +17,12 @@
     </Proxy>
     
     <Proxy "balancer://webserverset">
-	# Make it with a foreach in order to add dynamicaly members
+	    # Make it with a foreach in order to add dynamicaly members
         BalancerMember 'http://<?php print "$static_app1" ?>/' route=1
         BalancerMember 'http://<?php print "$static_app2" ?>/' route=2
-	ProxySet stickysession=ROUTEID
+        #BalancerMember 'http://<?php print "$static_app1" ?>/'
+        #BalancerMember 'http://<?php print "$static_app2" ?>/'
+	    ProxySet stickysession=ROUTEID
     </Proxy>
     
     ProxyPass '/api/quotes/' 'balancer://quotesset/'
