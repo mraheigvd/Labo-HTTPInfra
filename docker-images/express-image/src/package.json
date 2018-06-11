@@ -1,0 +1,19 @@
+{
+  "name": "teachers",
+  "version": "1.0.0",
+  "description": "RES - Labo INFRA 2018",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Mentor Reka",
+  "contributors": [
+    "Kamil Amrani"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "chance": "^1.0.16",
+    "express": "^4.16.3",
+    "ip": "^1.1.5"
+  }
+}
