@@ -1,7 +1,7 @@
 # Labo-HTTPInfra
 RES course - Final big lab
 
-
+This is a simple report for showing the choices and configurations of our solution.
 
 # Step 1: Static HTTP server with apache httpd
 
@@ -87,6 +87,50 @@ Add this line : (the first IP is gived by : ```docker-machine ip```)
 192.168.99.100  demo.res.ch
 ```
 
+All apache configurations are stored under a conf directory which contains a sites-available directory with these files:
+
+- 000-default.conf :
+
+```
+<VirtualHost *:80>
+</VirtualHost>
+```
+
+- 001-reverse-proxy.conf :
+
+```
+<VirtualHost *:80>
+    ServerName demo.res.ch
+    
+    ProxyPass "/api/quotes/" "http://172.17.0.3:3000/"
+    ProxyPassReverse "/api/quotes/" "http://172.17.0.3:3000/"
+    
+    ProxyPass "/" "http://172.17.0.2:80/"
+    ProxyPassReverse "/" "http://172.17.0.2:80/" 
+</VirtualHost>
+```
+
+Now, we can test our apache server by simply using curl/postman/broser within the docker machine like that :
+
+```
+docker-machine ssh
+telnet 172.17.0.3 3000
+```
+
+when it's done, we have to build our Docker container with this basic dockerfile :
+
+```
+#specify apache version
+FROM php:5.6-apache
+
+COPY conf/ /etc/apache2/
+
+RUN a2enmod proxy proxy_http
+RUN a2ensite 000-* 001-*
+```
+
+Now, we can simply test our apache server by calling demo.res.ch and demo.res.ch/api/quotes
+
 # Step 4: AJAX requests with JQuery
 
 We will do simple ajax requests with jQuery libraries. For that we downloaded an HTML template website from https://startbootstrap.com/ and added it to a content directory.
@@ -134,10 +178,67 @@ Last but not least, we edited the content/index.html in order to add our script 
     <script src="js/quotes-api.js"></script>
 ```
 
+# Step 5: Dynamic reverse proxy configuration
+
+For this part we had some difficulties with the version of apache2-foreground quoted on the webcasts.
+So we decided to get the last version of apache2-foreground from the docker hub.
+
+The reverse proxy configuration receive informations through the env variables by using php inside it and overwrite the 001-reverse-proxy.conf :
+
+```
+<?php 
+    $STATIC_APP = getenv('STATIC_APP');
+    $DYNAMIC_APP = getenv('DYNAMIC_APP');
+?>
+
+<VirtualHost *:80>
+    ServerName demo.res.ch
+    
+    ProxyPass '/api/quotes/' 'http://<?php print "$DYNAMIC_APP" ?>/'
+    ProxyPassReverse '/api/quotes/' 'http://<?php print "$DYNAMIC_APP" ?>/'
+    ProxyPass '/' 'http://<?php print "$STATIC_APP" ?>/'
+    ProxyPassReverse '/' 'http://<?php print "$STATIC_APP" ?>/' 
+</VirtualHost>
+```
 
 # Load balancing: multiple server nodes (0.5pt)
 
+For adding the load balancing between apache servers we changed the configuration like that :
 
+```
+<?php
+  $dynamic_app1 = getenv('DYNAMIC_APP1');
+  $dynamic_app2 = getenv('DYNAMIC_APP2');
+  $static_app1 = getenv('STATIC_APP1');
+  $static_app2 = getenv('STATIC_APP2');
+?>
+
+<VirtualHost *:80>
+    ServerName demo.res.ch
+    
+    <Proxy "balancer://quotesset">
+        BalancerMember 'http://<?php print "$dynamic_app1"?>'
+        BalancerMember 'http://<?php print "$dynamic_app2" ?>'
+    </Proxy>
+    
+    <Proxy "balancer://webserverset">
+        BalancerMember 'http://<?php print "$static_app1" ?>/'
+        BalancerMember 'http://<?php print "$static_app2" ?>/'
+    </Proxy>
+    
+    ProxyPass '/api/quotes/' 'balancer://quotesset/'
+    ProxyPassReverse '/api/quotes/' 'balancer://quotesset/'
+    
+    ProxyPass '/' 'balancer://webserverset/'
+    ProxyPassReverse '/' 'balancer://webserverset/' 
+</VirtualHost>
+```
+
+After changing the configuration, we need to enable some apache modules used for the load balancing :
+
+```
+RUN a2enmod proxy_balancer status lbmethod_byrequests headers
+```
 
 # Load balancing: round-robin vs sticky sessions (0.5 pt)
 
@@ -194,6 +295,12 @@ and we added the route id at webserverset proxy balancer :
     BalancerMember 'http://<?php print "$static_app2" ?>/' route=2
     ProxySet stickysession=ROUTEID
 </Proxy>
+```
+
+Then we enabled the module header on the Dockerfile :
+
+```
+RUN a2enmod proxy_balancer status lbmethod_byrequests headers
 ```
 
 Now, if we open a browser and request the page we can see via the header (which show the container IP) that we're always redirected at the same container IP with sticky session.
